@@ -1,4 +1,4 @@
-import { GetCommand, PutCommand, UpdateCommand, QueryCommand, ScanCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb'
+import { GetCommand, PutCommand, UpdateCommand, QueryCommand, ScanCommand, DeleteCommand, BatchGetCommand } from '@aws-sdk/lib-dynamodb'
 import { docClient } from '../db/dynamodb.js'
 import { v4 as uuidv4 } from 'uuid'
 

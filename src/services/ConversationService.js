@@ -192,16 +192,27 @@ export class ConversationService {
   async getConversationParticipants(conversationId, requesterUserId) {
     await this.ensureConversationAccess(conversationId, requesterUserId)
     const participantRecords = await ParticipantRepository.findByConversationId(conversationId, 200)
+    const activeRecords = (participantRecords || []).filter((item) => !item?.leftAt)
 
-    return (participantRecords || [])
-      .filter((item) => !item?.leftAt)
-      .map((item) => ({
+    const activeUserIds = activeRecords.map((item) => item.userId)
+    const userProfiles = activeUserIds.length > 0
+      ? await UserRepository.findByIds(activeUserIds)
+      : []
+    const userProfileMap = new Map(userProfiles.map((u) => [String(u.userId), u]))
+
+    return activeRecords.map((item) => {
+      const profile = userProfileMap.get(String(item.userId))
+      return {
         participantId: item.participantId,
         conversationId: item.conversationId,
         userId: item.userId,
+        name: profile?.fullName || profile?.displayName || profile?.username || null,
+        avatar: profile?.avatar || null,
+        isOnline: profile?.isOnline || false,
         role: item.role || 'member',
         joinedAt: item.joinedAt,
-      }))
+      }
+    })
   }
 
   async updateParticipantRole(conversationId, targetUserId, newRole, actorUserId) {
@@ -521,11 +532,31 @@ export class ConversationService {
         }
       }
 
+      // Batch fetch user profiles to resolve names
+      const activeParticipantIds = (participants || [])
+        .filter((item) => !item?.leftAt)
+        .map((item) => item.userId)
+
+      const userProfiles = activeParticipantIds.length > 0
+        ? await UserRepository.findByIds(activeParticipantIds)
+        : []
+      const userProfileMap = new Map(userProfiles.map((u) => [String(u.userId), u]))
+
+      const buildParticipantObject = (userId) => {
+        const profile = userProfileMap.get(String(userId))
+        return {
+          userId: String(userId),
+          name: profile?.fullName || profile?.displayName || profile?.username || null,
+          avatar: profile?.avatar || null,
+          isOnline: profile?.isOnline || false,
+        }
+      }
+
       return {
         ...conversation,
-        participants: participants
+        participants: (participants || [])
           .filter((item) => !item?.leftAt)
-          .map((item) => item.userId),
+          .map((item) => buildParticipantObject(item.userId)),
       }
     } catch (error) {
       if (error.message.includes('not found') || error.message.includes('do not have access')) {
@@ -565,6 +596,33 @@ export class ConversationService {
       ),
     ])
 
+    // Collect all participant user IDs for batch profile fetch
+    const allParticipantIds = []
+    for (const [, records] of participantsByConversation) {
+      for (const record of records || []) {
+        if (!record?.leftAt && record?.userId) {
+          allParticipantIds.push(record.userId)
+        }
+      }
+    }
+
+    // Batch fetch user profiles to resolve names
+    const uniqueUserIds = [...new Set(allParticipantIds)]
+    const userProfiles = uniqueUserIds.length > 0
+      ? await UserRepository.findByIds(uniqueUserIds)
+      : []
+    const userProfileMap = new Map(userProfiles.map((u) => [String(u.userId), u]))
+
+    const buildParticipantObject = (userId) => {
+      const profile = userProfileMap.get(String(userId))
+      return {
+        userId: String(userId),
+        name: profile?.fullName || profile?.displayName || profile?.username || null,
+        avatar: profile?.avatar || null,
+        isOnline: profile?.isOnline || false,
+      }
+    }
+
     const conversationById = new Map((conversationsRaw || []).map((conv) => [String(conv.conversationId), conv]))
     const participantMap = new Map(participantsByConversation)
     const latestMessageMap = new Map(latestMessagesByConversation)
@@ -596,7 +654,7 @@ export class ConversationService {
         ...conv,
         participants: participantRecords
           .filter((item) => !item?.leftAt)
-          .map((item) => item.userId),
+          .map((item) => buildParticipantObject(item.userId)),
         latestMessage,
         lastMessageAt: updatedAt || conv?.updatedAt,
       })
