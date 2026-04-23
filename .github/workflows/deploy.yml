@@ -23,7 +23,15 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_SSH_PORT }}
           script: |
-            cd /home/${{ secrets.EC2_USERNAME }}/TixChat-Backend
+            REPO_DIR="/home/${{ secrets.EC2_USERNAME }}/TixChat-Backend"
+            
+            # Clone repo nếu chưa có
+            if [ ! -d "$REPO_DIR" ]; then
+              cd /home/${{ secrets.EC2_USERNAME }}
+              git clone https://github.com/Chinhle0803/TixChat-Backend.git
+            fi
+            
+            cd $REPO_DIR
 
             # Pull code mới nhất
             git pull origin main
