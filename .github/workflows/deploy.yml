@@ -45,8 +45,7 @@ jobs:
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/tixchat-backend:latest
             ${{ steps.login-ecr.outputs.registry }}/tixchat-backend:${{ steps.meta.outputs.image-tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          no-cache: true
 
   deploy:
     name: Deploy to EC2
