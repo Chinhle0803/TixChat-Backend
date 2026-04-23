@@ -16,24 +16,9 @@ import messageRoutes from './routes/message.js'
 
 const app = express()
 
-const devLocalhostOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$/i
-
 const isAllowedOrigin = (origin) => {
   if (!origin) return true
-
-  if (Array.isArray(config.frontendOrigins) && config.frontendOrigins.includes(origin)) {
-    return true
-  }
-
-  if (origin === config.frontendUrl) {
-    return true
-  }
-
-  if (config.nodeEnv !== 'production' && devLocalhostOriginPattern.test(origin)) {
-    return true
-  }
-
-  return false
+  return true
 }
 
 const corsOriginHandler = (origin, callback) => {
