@@ -92,7 +92,7 @@ const startServer = async () => {
   try {
     await connectDB()
 
-    httpServer.listen(config.port, () => {
+    httpServer.listen(config.port, '0.0.0.0', () => {
       console.log(`
         🚀 Server is running!
         📍 Port: ${config.port}
