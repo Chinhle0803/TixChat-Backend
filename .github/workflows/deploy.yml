@@ -1,4 +1,4 @@
-name: Build & Deploy
+name: Build & Deploy to EC2
 
 on:
   push:
@@ -7,62 +7,13 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    name: Build Docker Image
-    runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ steps.meta.outputs.image-tag }}
-      ecr_registry: ${{ steps.login-ecr.outputs.registry }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Extract metadata
-        id: meta
-        run: |
-          IMAGE_TAG=$(echo "${{ github.sha }}" | cut -c1-8)
-          echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
-
-      - name: Build and push to Amazon ECR
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/tixchat-backend:latest
-            ${{ steps.login-ecr.outputs.registry }}/tixchat-backend:${{ steps.meta.outputs.image-tag }}
-          no-cache: true
-
   deploy:
     name: Deploy to EC2
-    needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -72,22 +23,19 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_SSH_PORT }}
           script: |
-            # 1. Login vào ECR ngay trên máy EC2 (Rất quan trọng)
-            aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+            cd /home/${{ secrets.EC2_USERNAME }}/TixChat-Backend
 
-            # 2. Khai báo biến
-            IMAGE_TAG=${{ needs.build.outputs.image_tag }}
-            ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
-            IMAGE_NAME=$ECR_REGISTRY/tixchat-backend:$IMAGE_TAG
+            # Pull code mới nhất
+            git pull origin main
 
-            # 3. Pull image mới
-            docker pull $IMAGE_NAME
+            # Build Docker image trực tiếp trên EC2
+            docker build --no-cache -t tixchat-backend:latest .
 
-            # 4. Dừng và xóa container cũ (nếu có)
+            # Dừng và xóa container cũ (nếu có)
             docker stop tixchat-backend || true
             docker rm tixchat-backend || true
 
-            # 5. Chạy container mới với đầy đủ biến môi trường
+            # Chạy container mới với đầy đủ biến môi trường
             docker run -d \
               --name tixchat-backend \
               --restart unless-stopped \
@@ -114,7 +62,6 @@ jobs:
               -e FRONTEND_URLS=${{ secrets.FRONTEND_URLS }} \
               -e REDIS_URL=${{ secrets.REDIS_URL }} \
               -e REDIS_ENABLED=${{ vars.REDIS_ENABLED }} \
-              $IMAGE_NAME
+              tixchat-backend:latest
 
-            # 6. Dọn dẹp các ảnh cũ không dùng đến để tránh đầy ổ cứng EC2
-            docker image prune -f
+            echo "Deployment completed successfully!"
