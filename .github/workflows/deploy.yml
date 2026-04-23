@@ -10,6 +10,9 @@ jobs:
   build:
     name: Build Docker Image
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image-tag }}
+      ecr_registry: ${{ steps.login-ecr.outputs.registry }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -28,12 +31,11 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata
         id: meta
         run: |
           IMAGE_TAG=$(echo "${{ github.sha }}" | cut -c1-8)
           echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
-          echo "ecr-registry=${{ steps.login-ecr.outputs.registry }}" >> $GITHUB_OUTPUT
 
       - name: Build and push to Amazon ECR
         uses: docker/build-push-action@v5
@@ -52,9 +54,6 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -73,19 +72,23 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_SSH_PORT }}
-          envs: IMAGE_TAG,ECR_REGISTRY
           script: |
-            IMAGE_TAG=$(echo "${{ github.sha }}" | cut -c1-8)
-            ECR_REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+            # 1. Login vào ECR ngay trên máy EC2 (Rất quan trọng)
+            aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
 
-            # Pull latest image
-            docker pull $ECR_REGISTRY/tixchat-backend:$IMAGE_TAG
+            # 2. Khai báo biến
+            IMAGE_TAG=${{ needs.build.outputs.image_tag }}
+            ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
+            IMAGE_NAME=$ECR_REGISTRY/tixchat-backend:$IMAGE_TAG
 
-            # Stop and remove old container
+            # 3. Pull image mới
+            docker pull $IMAGE_NAME
+
+            # 4. Dừng và xóa container cũ (nếu có)
             docker stop tixchat-backend || true
             docker rm tixchat-backend || true
 
-            # Run new container
+            # 5. Chạy container mới với đầy đủ biến môi trường
             docker run -d \
               --name tixchat-backend \
               --restart unless-stopped \
@@ -112,9 +115,7 @@ jobs:
               -e FRONTEND_URLS=${{ secrets.FRONTEND_URLS }} \
               -e REDIS_URL=${{ secrets.REDIS_URL }} \
               -e REDIS_ENABLED=${{ vars.REDIS_ENABLED }} \
-              $ECR_REGISTRY/tixchat-backend:$IMAGE_TAG
+              $IMAGE_NAME
 
-            # Cleanup unused images
+            # 6. Dọn dẹp các ảnh cũ không dùng đến để tránh đầy ổ cứng EC2
             docker image prune -f
-
-            echo "Deployment completed successfully"
