@@ -1,5 +1,4 @@
 import messageService from '../services/MessageService.js'
-import conversationService from '../services/ConversationService.js'
 import { sendMessageValidation } from '../utils/validation.js'
 import { getIO } from '../utils/ioInstance.js'
 import S3Service from '../services/S3Service.js'
@@ -44,14 +43,6 @@ const sanitizeFileName = (value = '') =>
     .replace(/[\\/:*?"<>|]/g, '_')
     .trim()
 
-const normalizeParticipantId = (participant) => {
-  if (!participant) return ''
-  if (typeof participant === 'object') {
-    return String(participant._id || participant.userId || participant.id || '')
-  }
-  return String(participant)
-}
-
 export class MessageController {
   async getUnreadCounts(req, res, next) {
     try {
@@ -76,6 +67,7 @@ export class MessageController {
         value.replyTo,
         {
           clientMessageId: value.clientMessageId,
+          type: value.type || 'text',
         }
       )
 
@@ -337,26 +329,7 @@ export class MessageController {
 
       const io = getIO()
       if (io) {
-        // Get all participants so we can notify everyone except the deleter
-        const conversation = await conversationService.getConversationById(conversationId)
-        const participants = Array.isArray(conversation?.participants)
-          ? conversation.participants
-          : []
-
-        // Emit to all participants except the user who deleted
-        participants.forEach((participant) => {
-          const participantId = normalizeParticipantId(participant)
-          if (!participantId || participantId === req.userId) return
-
-          io.to(`user:${participantId}`).emit('message:hidden', {
-            messageId,
-            conversationId,
-            hiddenBy: req.userId,
-          })
-        })
-
-        // Also emit to the conversation room so all connected clients update
-        io.to(`conversation:${conversationId}`).emit('message:hidden', {
+        io.to(`user:${req.userId}`).emit('message:hidden', {
           messageId,
           conversationId,
           hiddenBy: req.userId,

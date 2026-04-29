@@ -15,6 +15,34 @@ export class ConversationService {
     return String(value)
   }
 
+  isMessageVisibleForUser(message, userId, clearedAt = 0) {
+    if (!message || message.isDeleted) return false
+    if (clearedAt && Number(message.createdAt || 0) <= clearedAt) return false
+
+    const deletedBy = message.deletedBy || {}
+    return !deletedBy[String(userId)]
+  }
+
+  async findLatestVisibleMessage(conversationId, userId, clearedAt = 0) {
+    let cursor = null
+    let page = 0
+
+    while (page < 5) {
+      const result = await MessageRepository.getByConversation(conversationId, 25, cursor)
+      const message = (result?.messages || []).find((item) =>
+        this.isMessageVisibleForUser(item, userId, clearedAt)
+      )
+
+      if (message) return message
+      if (!result?.lastEvaluatedKey) return null
+
+      cursor = result.lastEvaluatedKey
+      page += 1
+    }
+
+    return null
+  }
+
   async mapWithConcurrency(items = [], worker, concurrency = 8) {
     if (!Array.isArray(items) || items.length === 0) {
       return []
@@ -589,8 +617,13 @@ export class ConversationService {
       this.mapWithConcurrency(
         conversationIds,
         async (conversationId) => {
-          const result = await MessageRepository.getByConversation(conversationId, 1)
-          return [conversationId, result?.messages?.[0] || null]
+          const participant = activeParticipants.find((item) => item.conversationId === conversationId)
+          const latestMessage = await this.findLatestVisibleMessage(
+            conversationId,
+            userId,
+            Number(participant?.clearedAt || 0)
+          )
+          return [conversationId, latestMessage]
         },
         8
       ),

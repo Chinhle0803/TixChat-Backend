@@ -303,9 +303,12 @@ export class MessageService {
 
     return messages.filter((message) => {
       const createdAt = Number(message.createdAt || 0)
+      const deletedBy = message.deletedBy || {}
       return (
         String(message.senderId) !== String(userId) &&
-        createdAt > threshold
+        createdAt > threshold &&
+        message.isDeleted !== true &&
+        !deletedBy[String(userId)]
       )
     }).length
   }
@@ -366,8 +369,9 @@ export class MessageService {
       throw new Error('Message not found')
     }
 
-    if (message.senderId !== senderId) {
-      throw new Error('You can only delete your own messages')
+    const participant = await ParticipantRepository.findOne(conversationId, senderId)
+    if (!participant || participant.leftAt) {
+      throw new Error('You are not a participant of this conversation')
     }
 
     await MessageRepository.deleteForUser(conversationId, messageId, senderId)

@@ -64,6 +64,7 @@ export const sendMessageValidation = (data) => {
     content: joi.string().max(5000).required().messages({
       'string.max': 'Message must not exceed 5000 characters',
     }),
+    type: joi.string().valid('text', 'emoji').optional(),
     replyTo: joi.string().allow(null, '').optional(),
     clientMessageId: joi.string().max(128).optional(),
   })

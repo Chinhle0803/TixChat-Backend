@@ -134,24 +134,7 @@ export const initializeSocketHandlers = (io) => {
           socket.userId
         )
 
-        // Get conversation participants to notify everyone
-        const conversation = await conversationService.getConversationById(result.conversationId)
-        const participants = Array.isArray(conversation?.participants)
-          ? conversation.participants
-          : []
-
-        participants.forEach((participant) => {
-          const participantId = normalizeParticipantId(participant)
-          if (!participantId || participantId === socket.userId) return
-
-          io.to(`user:${participantId}`).emit('message:hidden', {
-            messageId: data.messageId,
-            conversationId: result.conversationId,
-            hiddenBy: socket.userId,
-          })
-        })
-
-        io.to(`conversation:${result.conversationId}`).emit('message:hidden', {
+        io.to(`user:${socket.userId}`).emit('message:hidden', {
           messageId: data.messageId,
           conversationId: result.conversationId,
           hiddenBy: socket.userId,
