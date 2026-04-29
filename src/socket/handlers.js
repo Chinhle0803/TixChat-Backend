@@ -13,6 +13,14 @@ import {
 // Store active socket connections (userId -> socket.id)
 const userSockets = new Map()
 
+const normalizeParticipantId = (participant) => {
+  if (!participant) return ''
+  if (typeof participant === 'object') {
+    return String(participant._id || participant.userId || participant.id || '')
+  }
+  return String(participant)
+}
+
 export const initializeSocketHandlers = (io) => {
   io.use((socket, next) => {
     const token = socket.handshake.auth.token
@@ -132,14 +140,15 @@ export const initializeSocketHandlers = (io) => {
           ? conversation.participants
           : []
 
-        participants.forEach((participantId) => {
-          if (participantId !== socket.userId) {
-            io.to(`user:${participantId}`).emit('message:hidden', {
-              messageId: data.messageId,
-              conversationId: result.conversationId,
-              hiddenBy: socket.userId,
-            })
-          }
+        participants.forEach((participant) => {
+          const participantId = normalizeParticipantId(participant)
+          if (!participantId || participantId === socket.userId) return
+
+          io.to(`user:${participantId}`).emit('message:hidden', {
+            messageId: data.messageId,
+            conversationId: result.conversationId,
+            hiddenBy: socket.userId,
+          })
         })
 
         io.to(`conversation:${result.conversationId}`).emit('message:hidden', {
@@ -241,7 +250,10 @@ export const initializeSocketHandlers = (io) => {
         ? conversation.participants
         : []
 
-      participantIds.forEach((participantId) => {
+      participantIds.forEach((participant) => {
+        const participantId = normalizeParticipantId(participant)
+        if (!participantId) return
+
         io.to(`user:${participantId}`).emit('message:received', {
           message: data.message,
         })

@@ -44,21 +44,15 @@ const sanitizeFileName = (value = '') =>
     .replace(/[\\/:*?"<>|]/g, '_')
     .trim()
 
-export class MessageController {
-  async broadcastMessageToParticipants(conversationId, message) {
-    const io = getIO()
-    if (!io) return
-
-    const conversation = await conversationService.getConversationById(conversationId)
-    const participants = Array.isArray(conversation?.participants)
-      ? conversation.participants
-      : []
-
-    participants.forEach((participantId) => {
-      io.to(`user:${participantId}`).emit('message:received', { message })
-    })
+const normalizeParticipantId = (participant) => {
+  if (!participant) return ''
+  if (typeof participant === 'object') {
+    return String(participant._id || participant.userId || participant.id || '')
   }
+  return String(participant)
+}
 
+export class MessageController {
   async getUnreadCounts(req, res, next) {
     try {
       const unreadByConversation = await messageService.getUnreadCountsForUser(req.userId)
@@ -84,8 +78,6 @@ export class MessageController {
           clientMessageId: value.clientMessageId,
         }
       )
-
-      await this.broadcastMessageToParticipants(value.conversationId, message)
 
       res.status(201).json({
         message: 'Message sent successfully',
@@ -138,8 +130,6 @@ export class MessageController {
           clientMessageId,
         }
       )
-
-      await this.broadcastMessageToParticipants(conversationId, message)
 
       res.status(201).json({
         message: 'Attachment message sent successfully',
@@ -233,8 +223,6 @@ export class MessageController {
           clientMessageId,
         }
       )
-
-      await this.broadcastMessageToParticipants(conversationId, message)
 
       return res.status(201).json({
         message: 'Attachment forwarded successfully',
@@ -356,14 +344,15 @@ export class MessageController {
           : []
 
         // Emit to all participants except the user who deleted
-        participants.forEach((participantId) => {
-          if (participantId !== req.userId) {
-            io.to(`user:${participantId}`).emit('message:hidden', {
-              messageId,
-              conversationId,
-              hiddenBy: req.userId,
-            })
-          }
+        participants.forEach((participant) => {
+          const participantId = normalizeParticipantId(participant)
+          if (!participantId || participantId === req.userId) return
+
+          io.to(`user:${participantId}`).emit('message:hidden', {
+            messageId,
+            conversationId,
+            hiddenBy: req.userId,
+          })
         })
 
         // Also emit to the conversation room so all connected clients update
