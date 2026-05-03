@@ -63,6 +63,11 @@ export const config = {
   s3BucketName: process.env.S3_BUCKET_NAME || 'tixchat-avatars',
   s3AvatarFolder: process.env.S3_AVATAR_FOLDER || 'avatars',
   s3MessageFolder: process.env.S3_MESSAGE_FOLDER || 'messages',
+
+  // AWS Chime SDK Meetings
+  awsChimeRegion: process.env.AWS_CHIME_REGION || process.env.AWS_REGION || 'us-east-1',
+  chimeMeetingRegion: process.env.CHIME_MEETING_REGION || process.env.AWS_CHIME_REGION || process.env.AWS_REGION || 'us-east-1',
+  callRingTimeoutSeconds: parseInt(process.env.CALL_RING_TIMEOUT_SECONDS || '60', 10),
 }
 
 export default config

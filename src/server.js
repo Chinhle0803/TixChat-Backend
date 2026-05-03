@@ -13,6 +13,8 @@ import authRoutes from './routes/auth.js'
 import userRoutes from './routes/user.js'
 import conversationRoutes from './routes/conversation.js'
 import messageRoutes from './routes/message.js'
+import callRoutes from './routes/call.js'
+import notificationRoutes from './routes/notification.js'
 
 const app = express()
 
@@ -64,6 +66,8 @@ app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/conversations', conversationRoutes)
 app.use('/api/messages', messageRoutes)
+app.use('/api/calls', callRoutes)
+app.use('/api/notifications', notificationRoutes)
 
 // Socket.IO
 initializeSocketHandlers(io)

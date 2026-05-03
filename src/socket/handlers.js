@@ -2,6 +2,7 @@ import { verifyToken } from '../utils/tokenUtils.js'
 import userService from '../services/UserService.js'
 import messageService from '../services/MessageService.js'
 import conversationService from '../services/ConversationService.js'
+import notificationService from '../services/NotificationService.js'
 import { messageEvents, conversationEvents, userEvents } from '../events/EventBus.js'
 import {
   USER_EVENTS,
@@ -240,6 +241,14 @@ export const initializeSocketHandlers = (io) => {
         io.to(`user:${participantId}`).emit('message:received', {
           message: data.message,
         })
+      })
+
+      notificationService.sendMessageNotifications({
+        conversation,
+        message: data.message,
+        participantIds: participantIds.map((participant) => normalizeParticipantId(participant)).filter(Boolean),
+      }).catch((error) => {
+        console.warn('Failed to send push notification:', error?.message || error)
       })
     } catch (error) {
       console.error('❌ Failed to emit message:received from MESSAGE_EVENTS.SENT:', error?.message || error)
